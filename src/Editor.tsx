@@ -1,3 +1,4 @@
+import { useDeletion } from "./Deletion";
 import { t } from "./i18n/ja";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
@@ -11,6 +12,7 @@ import { treeRepository } from "./local/repository/treeRepository";
 import { settingsRepository } from "./local/repository/settingsRepository";
 export default function Editor() {
   const [params] = useSearchParams();
+  const requestDelete = useDeletion();
   const edit = params.get("edit"),
     series = params.get("series"),
     parent = params.get("parent");
@@ -437,6 +439,19 @@ export default function Editor() {
             </button>
           )}
         </div>
+        {edit && initial && (
+          <section className="danger-zone" aria-label="Danger Zone">
+            <h3>Danger Zone</h3>
+            <button
+              type="button"
+              className="danger"
+              disabled={busy}
+              onClick={() => requestDelete(initial)}
+            >
+              {initial.is_root ? "シリーズを削除" : "カードを削除"}
+            </button>
+          </section>
+        )}
       </form>
     </section>
   );

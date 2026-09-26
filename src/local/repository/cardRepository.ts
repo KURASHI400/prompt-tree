@@ -1,3 +1,4 @@
+import { deletionService } from "../deletionService";
 import { z } from "zod";
 import { activeWorkspace, database } from "../db";
 import { childId, placement, seriesLabel, normalize } from "../../domain";
@@ -220,23 +221,10 @@ export const cardRepository = {
     });
   },
   remove(id: string) {
-    return write(async (tx, w) => {
-      const c = requireRecord(await tx.objectStore("cards").get(id), w);
-      if (c.is_root) throw new Error("RootはSeriesから削除してください");
-      await softDelete(tx, w, [id]);
-    });
+    return deletionService.remove({ kind: "card", id });
   },
   restore(id: string) {
-    return write(async (tx, w) => {
-      const c = requireRecord(await tx.objectStore("cards").get(id), w, true);
-      requireRecord(await tx.objectStore("series").get(c.series_id), w);
-      if ((await tx.objectStore("cleanupQueue").get(id)) === undefined)
-        throw new Error("復元の猶予期間が終了しました");
-      await tx
-        .objectStore("cards")
-        .put({ ...c, deleted_at: null, version: c.version + 1 });
-      await tx.objectStore("cleanupQueue").delete(id);
-    });
+    return deletionService.restore({ kind: "card", id });
   },
   cover(id: string, input: { image_id: string; expectedVersion?: number }) {
     return write(async (tx, w) => {
@@ -334,16 +322,3 @@ export const cardRepository = {
     return result;
   },
 };
-export async function softDelete(tx: WriteTx, w: string, ids: string[]) {
-  for (const id of ids) {
-    const c = requireRecord(await tx.objectStore("cards").get(id), w);
-    await tx
-      .objectStore("cards")
-      .put({ ...c, deleted_at: Date.now(), version: c.version + 1 });
-    await tx.objectStore("cleanupQueue").put({
-      id,
-      workspace_id: w,
-      value: { kind: "card", at: Date.now() + 3600000 },
-    });
-  }
-}

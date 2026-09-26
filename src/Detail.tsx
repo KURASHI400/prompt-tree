@@ -8,11 +8,14 @@ import { ImageControls } from "./ImageControls";
 import { seriesRepository } from "./local/repository/seriesRepository";
 import { cardRepository } from "./local/repository/cardRepository";
 import { treeRepository } from "./local/repository/treeRepository";
-import { record } from "./history";
+import { ActionDialog } from "./ActionDialog";
+import { useDeletion } from "./Deletion";
 import { childId } from "./domain";
 const Viewer = lazy(() => import("./Viewer"));
 export default function Detail() {
   const { id } = useParams();
+  const requestDelete = useDeletion();
+  const [menu, setMenu] = useState(false);
   const {
     data: c,
     error,
@@ -57,12 +60,64 @@ export default function Detail() {
         >
           {t("detail_030")}
         </button>
-        <button
-          onClick={() => c && nav(`/series/${c.series_id}/tree?focus=${c.id}`)}
-        >
-          {t("detail_031")}
-        </button>
+        <div className="detail-header-actions">
+          <button
+            onClick={() =>
+              c && nav(`/series/${c.series_id}/tree?focus=${c.id}`)
+            }
+          >
+            {t("detail_031")}
+          </button>
+          <button
+            className="more-button"
+            aria-label="操作メニュー"
+            aria-haspopup="dialog"
+            disabled={!c}
+            onClick={() => setMenu(true)}
+          >
+            …
+          </button>
+        </div>
       </header>
+      {menu && c && (
+        <ActionDialog title="操作メニュー" onClose={() => setMenu(false)}>
+          <div className="action-menu">
+            <button
+              onClick={() => {
+                setMenu(false);
+                openEditor("/new?edit=" + c.id);
+              }}
+            >
+              編集
+            </button>
+            <button
+              onClick={() => {
+                setMenu(false);
+                void run(async () => {
+                  const copy = await cardRepository.duplicate(c.id);
+                  nav("/cards/" + copy.id, {
+                    replace: true,
+                    state: { background },
+                  });
+                });
+              }}
+            >
+              複製
+            </button>
+            <hr />
+            <button
+              className="danger"
+              onClick={() => {
+                setMenu(false);
+                requestDelete(c);
+              }}
+            >
+              {c.is_root ? "シリーズを削除" : "カードを削除"}
+            </button>
+            <button onClick={() => setMenu(false)}>キャンセル</button>
+          </div>
+        </ActionDialog>
+      )}
       {error && <p role="alert">{error}</p>}
       {c && (
         <div className="detail">
@@ -178,63 +233,6 @@ export default function Detail() {
           <ImageControls card={c} refresh={refresh} />
           <details>
             <summary>{t("detail_046")}</summary>
-            {c.is_root && (
-              <button
-                onClick={() => {
-                  if (confirm(c.display_id + t("detail_047")))
-                    void run(async () => {
-                      await seriesRepository.remove(c.series_id);
-                      sessionStorage.setItem(
-                        "deleted-card",
-                        JSON.stringify({
-                          id: c.series_id,
-                          kind: "series",
-                          at: Date.now(),
-                        }),
-                      );
-                      nav("/home");
-                    });
-                }}
-              >
-                {t("detail_048")}
-              </button>
-            )}
-            <div className="actions">
-              <button
-                onClick={() =>
-                  void run(async () => {
-                    const copy = await cardRepository.duplicate(c.id);
-                    nav(`/cards/${copy.id}`, {
-                      replace: true,
-                      state: { background },
-                    });
-                  })
-                }
-              >
-                {t("detail_049")}
-              </button>
-              {!c.is_root && (
-                <button
-                  onClick={() => {
-                    if (confirm(`${c.display_id}を削除しますか？`))
-                      void run(async () => {
-                        await cardRepository.remove(c.id);
-                        record(c.series_id, {
-                          undo: () => cardRepository.restore(c.id),
-                          redo: () => cardRepository.remove(c.id),
-                        });
-                        sessionStorage.setItem(
-                          "deleted-card",
-                          JSON.stringify({ id: c.id, at: Date.now() }),
-                        );
-                        nav(`/series/${c.series_id}/tree`);
-                      });
-                  }}
-                >
-                  {t("detail_050")}
-                </button>
-              )}
-            </div>
             {!c.is_root && (
               <>
                 <label>

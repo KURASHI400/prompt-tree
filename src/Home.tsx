@@ -23,14 +23,20 @@ import { useData, changed } from "./useData";
 import { seriesRepository } from "./local/repository/seriesRepository";
 import { Thumb } from "./Thumb";
 import { BackupReminder } from "./BackupReminder";
-import { UndoNotice } from "./UndoNotice";
+import { useState } from "react";
+import { ActionDialog } from "./ActionDialog";
+import { useDeletion } from "./Deletion";
 function SeriesTile({
   series,
   onOpen,
+  onEdit,
 }: {
   series: Series;
   onOpen: () => void;
+  onEdit: () => void;
 }) {
+  const requestDelete = useDeletion();
+  const [menu, setMenu] = useState(false);
   const {
     attributes,
     listeners,
@@ -40,32 +46,84 @@ function SeriesTile({
     isDragging,
   } = useSortable({ id: series.id });
   return (
-    <button
-      aria-label={
-        series.title
-          ? `${series.display_id} ${series.title}`
-          : series.display_id
-      }
+    <div
+      className="series-tile-wrap"
       ref={setNodeRef}
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
         opacity: isDragging ? 0.6 : 1,
       }}
-      {...attributes}
-      {...listeners}
-      onClick={onOpen}
-      className="series-tile"
     >
-      <Thumb
-        id={series.cover_image_id}
-        alt={series.title || series.display_id}
-      />
-      <span className="tile-caption">
-        <b>{series.display_id}</b>
-        {series.title && <span>{series.title}</span>}
-      </span>
-    </button>
+      <button
+        aria-label={
+          series.title
+            ? `${series.display_id} ${series.title}`
+            : series.display_id
+        }
+        {...attributes}
+        {...listeners}
+        onClick={onOpen}
+        className="series-tile"
+      >
+        <Thumb
+          id={series.cover_image_id}
+          alt={series.title || series.display_id}
+        />
+        <span className="tile-caption">
+          <b>{series.display_id}</b>
+          {series.title && <span>{series.title}</span>}
+        </span>
+      </button>
+      <button
+        className="more-button tile-more"
+        aria-label={series.display_id + "の操作メニュー"}
+        aria-haspopup="dialog"
+        onClick={() => setMenu(true)}
+      >
+        …
+      </button>
+      {menu && (
+        <ActionDialog
+          title={series.display_id + "の操作メニュー"}
+          onClose={() => setMenu(false)}
+        >
+          <div className="action-menu">
+            <button
+              onClick={() => {
+                setMenu(false);
+                onOpen();
+              }}
+            >
+              詳細を見る
+            </button>
+            <button
+              onClick={() => {
+                setMenu(false);
+                onEdit();
+              }}
+            >
+              編集
+            </button>
+            <hr />
+            <button
+              className="danger"
+              onClick={() => {
+                setMenu(false);
+                requestDelete({
+                  id: series.root_card_id,
+                  series_id: series.id,
+                  is_root: true,
+                });
+              }}
+            >
+              シリーズを削除
+            </button>
+            <button onClick={() => setMenu(false)}>キャンセル</button>
+          </div>
+        </ActionDialog>
+      )}
+    </div>
   );
 }
 export default function Home() {
@@ -104,7 +162,6 @@ export default function Home() {
   return (
     <main className="page home">
       <BackupReminder />
-      <UndoNotice />
       <div className="section-title">
         <div>
           <p className="eyebrow">COLLECTIONS</p>
@@ -141,6 +198,11 @@ export default function Home() {
               <SeriesTile
                 key={series.id}
                 series={series}
+                onEdit={() =>
+                  navigate("/new?edit=" + series.root_card_id, {
+                    state: { background: location },
+                  })
+                }
                 onOpen={() =>
                   navigate(`/cards/${series.root_card_id}`, {
                     state: { background: location },

@@ -25,7 +25,6 @@ import "@xyflow/react/dist/style.css";
 import { treeRepository } from "./local/repository/treeRepository";
 import { useData, changed } from "./useData";
 import { Thumb } from "./Thumb";
-import { UndoNotice } from "./UndoNotice";
 import type { Edge, Series, TreeData, TreeNode } from "./types";
 import { seriesRepository } from "./local/repository/seriesRepository";
 import { record, travel, historyState } from "./history";
@@ -366,7 +365,6 @@ function Canvas({ seriesId }: { seriesId: string }) {
     })) ?? [];
   return (
     <main ref={container} className="tree-canvas" data-testid="tree-canvas">
-      <UndoNotice />
       <ReactFlow<FlowNode>
         nodes={nodes}
         edges={edges}

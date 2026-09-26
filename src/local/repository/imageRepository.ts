@@ -88,6 +88,7 @@ export const imageRepository = {
       db = await database(),
       c = requireRecord(await db.get("cards", card), w);
     let i: LocalImage | undefined;
+    let pendingStored = false;
     try {
       await (dependencies?.preflight ?? preflight)(file.size + 1024 * 1024);
       const store = dependencies?.store ?? (await fileStore()),
@@ -112,7 +113,13 @@ export const imageRepository = {
         original_key: imagePath(w, card, id),
         thumbnail_key: null,
       };
-      await db.put("images", i);
+      const pending = i;
+      await write(async (tx, workspace) => {
+        if (workspace !== w) throw new Error("保存領域が変更されました");
+        requireRecord(await tx.objectStore("cards").get(card), w);
+        await tx.objectStore("images").put(pending);
+      });
+      pendingStored = true;
       await store.write(i.original_key, file);
       if ((await store.read(i.original_key)).size !== file.size)
         throw new Error("Originalの保存サイズが一致しません");
@@ -163,7 +170,7 @@ export const imageRepository = {
       });
       return id;
     } catch (error) {
-      if (i) {
+      if (i && pendingStored) {
         await db.put("images", { ...i, upload_status: "failed" });
         await db.put("cleanupQueue", {
           id: i.id,

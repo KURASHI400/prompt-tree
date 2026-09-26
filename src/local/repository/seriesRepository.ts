@@ -1,5 +1,6 @@
+import { deletionService } from "../deletionService";
 import { activeWorkspace, database } from "../db";
-import { createCard, softDelete } from "./cardRepository";
+import { createCard } from "./cardRepository";
 import { requireRecord, write } from "./common";
 export const seriesRepository = {
   async list() {
@@ -38,48 +39,9 @@ export const seriesRepository = {
     });
   },
   remove(id: string) {
-    return write(async (tx, w) => {
-      const s = requireRecord(await tx.objectStore("series").get(id), w);
-      const cards = (
-        await tx.objectStore("cards").index("workspace").getAll(w)
-      ).filter((c) => c.series_id === id && !c.deleted_at);
-      await softDelete(
-        tx,
-        w,
-        cards.map((c) => c.id),
-      );
-      await tx.objectStore("series").put({ ...s, deleted_at: Date.now() });
-      await tx.objectStore("cleanupQueue").put({
-        id,
-        workspace_id: w,
-        value: {
-          kind: "series",
-          at: Date.now() + 3600000,
-          cards: cards.map((c) => c.id),
-        },
-      });
-    });
+    return deletionService.remove({ kind: "series", id });
   },
   restore(id: string) {
-    return write(async (tx, w) => {
-      const s = requireRecord(await tx.objectStore("series").get(id), w, true);
-      const job = (await tx.objectStore("cleanupQueue").get(id))?.value as
-        { cards: string[]; at: number } | undefined;
-      if (!job || job.at <= Date.now())
-        throw new Error("復元の猶予期間が終了しました");
-      for (const card of job.cards) {
-        const c = requireRecord(
-          await tx.objectStore("cards").get(card),
-          w,
-          true,
-        );
-        await tx
-          .objectStore("cards")
-          .put({ ...c, deleted_at: null, version: c.version + 1 });
-        await tx.objectStore("cleanupQueue").delete(card);
-      }
-      await tx.objectStore("series").put({ ...s, deleted_at: null });
-      await tx.objectStore("cleanupQueue").delete(id);
-    });
+    return deletionService.restore({ kind: "series", id });
   },
 };

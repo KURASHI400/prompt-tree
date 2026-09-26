@@ -1,15 +1,28 @@
+import { purgeDeletion } from "./deletionService";
 import { deleteDB } from "idb";
 import { activeWorkspace, closeDatabase, database } from "./db";
 import { DATABASE_NAME, RESEARCH_STORES } from "./schema";
 import { fileStore } from "./files/fileStore";
 import { clearImageUrls } from "./files/objectUrlCache";
-export async function cleanup(now = Date.now()) {
+let running: Promise<void> | undefined;
+export function cleanup(now = Date.now()): Promise<void> {
+  if (!running)
+    running = runCleanup(now).finally(() => {
+      running = undefined;
+    });
+  return running;
+}
+async function runCleanup(now: number) {
   const db = await database(),
     active = await activeWorkspace(),
     queue = await db.getAll("cleanupQueue");
   for (const item of queue) {
     const job = item.value as { kind: string; at: number };
     if (now < job.at) continue;
+    if (job.kind === "card" || job.kind === "series") {
+      await purgeDeletion(item, now);
+      continue;
+    }
     if (job.kind === "workspace") {
       if (item.workspace_id === active) continue;
       const images = await db.getAllFromIndex(

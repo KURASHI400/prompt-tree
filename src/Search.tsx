@@ -1,5 +1,5 @@
 import { t } from "./i18n/ja";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { searchRepository } from "./local/repository/searchRepository";
 import { Thumb } from "./Thumb";
@@ -19,28 +19,43 @@ export default function Search() {
     [error, setError] = useState("");
   const nav = useNavigate(),
     location = useLocation();
+  const [revision, setRevision] = useState(0);
+  const generation = useRef(0);
+  useEffect(() => {
+    const refresh = () => {
+      generation.current++;
+      setRevision((value) => value + 1);
+    };
+    window.addEventListener("data-changed", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.removeEventListener("data-changed", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, []);
   useEffect(() => {
     let alive = true;
+    const request = ++generation.current;
     const timer = setTimeout(() => {
       sessionStorage.setItem("search-query", query);
       void searchRepository
         .search(query)
         .then((r) => {
-          if (alive) {
+          if (alive && request === generation.current) {
             setResults(r.items);
             setCursor(r.cursor);
             setError("");
           }
         })
         .catch((e) => {
-          if (alive) setError(e.message);
+          if (alive && request === generation.current) setError(e.message);
         });
     }, 300);
     return () => {
       alive = false;
       clearTimeout(timer);
     };
-  }, [query]);
+  }, [query, revision]);
   return (
     <main className="page search-page">
       <h2>{t("app_007")}</h2>
@@ -78,15 +93,19 @@ export default function Search() {
       )}
       {cursor && (
         <button
-          onClick={() =>
+          onClick={() => {
+            const request = generation.current;
             void searchRepository
               .search(query, cursor)
               .then((r) => {
+                if (request !== generation.current) return;
                 setResults([...results, ...r.items]);
                 setCursor(r.cursor);
               })
-              .catch((e) => setError(e.message))
-          }
+              .catch((e) => {
+                if (request === generation.current) setError(e.message);
+              });
+          }}
         >
           {t("search_139")}
         </button>
