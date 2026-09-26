@@ -1,0 +1,13 @@
+node_modules/
+dist/
+dist-worker/
+.wrangler/
+.dev.vars
+.env*
+!.env.example
+test-results/
+playwright-report/
+work/
+.pnpm-store/
+
+dist-worker-production/
