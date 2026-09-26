@@ -56,18 +56,34 @@ test("10k gallery metadata, bounded DOM, filters, viewer and detail scroll retur
     .poll(() => scroll.evaluate((el) => el.scrollTop))
     .toBeGreaterThan(1000);
   const top = await scroll.evaluate((el) => el.scrollTop);
-  const visibleIndex = await page
-    .getByTestId("image-cell")
-    .evaluateAll((nodes) => {
-      const parent = document
-        .querySelector("[data-testid=gallery-scroll]")!
-        .getBoundingClientRect();
-      return nodes.findIndex((el) => {
-        const rect = el.getBoundingClientRect();
-        return rect.top >= parent.top && rect.bottom <= parent.bottom;
-      });
-    });
-  await page.getByTestId("image-cell").nth(visibleIndex).click();
+  // Scrolling updates virtual rows asynchronously. A DOM index captured before
+  // that render can become -1 or refer to another cell, causing click() to scroll.
+  // Wait for an on-screen image and keep its stable label across row recycling.
+  let visibleImageLabel: string | null = null;
+  await expect
+    .poll(async () => {
+      visibleImageLabel = await page
+        .getByTestId("image-cell")
+        .evaluateAll((nodes) => {
+          const parent = document
+            .querySelector("[data-testid=gallery-scroll]")!
+            .getBoundingClientRect();
+          return (
+            nodes
+              .find((el) => {
+                const rect = el.getBoundingClientRect();
+                return rect.top >= parent.top && rect.bottom <= parent.bottom;
+              })
+              ?.getAttribute("aria-label") ?? null
+          );
+        });
+      return visibleImageLabel;
+    })
+    .not.toBeNull();
+  await page
+    .getByRole("button", { name: visibleImageLabel!, exact: true })
+    .click();
+  expect(await scroll.evaluate((el) => el.scrollTop)).toBe(top);
   await expect(page.locator(".pswp__img").first()).toHaveAttribute(
     "src",
     /^blob:/,
